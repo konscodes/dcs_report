@@ -19,27 +19,54 @@ import requests
 import json
 import datetime
 
-if __name__ == '__main__':
-    ## Generate auth token
-    # Open the JSON file and load credentials   
-    with open('./auth/credentials.json') as json_file:
-        credentials = json.load(json_file)
-    oauth = 'https://www.humanity.com/oauth2/token.php'
-    response = requests.post(url=oauth, data=credentials)
-    auth_token = json.loads(response.text)['access_token']
+# Constants and configurations
+AUTH_URL = 'https://www.humanity.com/oauth2/token.php'
+API_BASE_URL = 'https://www.humanity.com/api/v2'
+CREDENTIALS_FILE = './auth/credentials.json'
 
-    # Set request parameters
+def get_access_token(credentials_file):
+    # Retrieve access token using provided credentials
+    with open(credentials_file) as json_file:
+        credentials = json.load(json_file)
+    
+    response = requests.post(url=AUTH_URL, data=credentials)
+    return json.loads(response.text)['access_token']
+
+
+def get_shifts(start_date, end_date, access_token, positions):
+    # Format URL parameters
+    schedule = ', '.join(positions.keys())
+    params = {
+        'start_date': str(start_date),
+        'end_date': str(end_date),
+        'mode': 'schedule',
+        'schedule': schedule,
+        'access_token': access_token
+    }
+
+    # Construct API URL
+    url = f'{API_BASE_URL}/shifts'
+    headers = {"accept": "application/json"}
+
+    # Get shift data
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Failed to retrieve shifts. Status code: {response.status_code}")
+        return None
+
+
+if __name__ == '__main__':
+    access_token = get_access_token(CREDENTIALS_FILE)
     start_date = datetime.date(2024, 2, 4)
     end_date = datetime.date(2024, 2, 5)
-    
-    positions = {'3110230': 'Cisco', '203110228': 'T1', '203110229': 'T2'}
-    schedule = '%2C%'.join(pos_id for pos_id in positions)
-    
-    api = f'https://www.humanity.com/api/v2/shifts?'
-    parameters = f'start_date={start_date}&end_date={end_date}&mode=schedule&schedule={schedule}&access_token={auth_token}'
-    url = api + parameters
-    
-    headers = {"accept": "application/json"}
-    
-    # Get shift data
-    shifts = requests.get(url, headers)
+    positions = {'3110230': 'Cisco', '3110228': 'T1', '3110229': 'T2'}
+
+    shifts_data = get_shifts(start_date, end_date, access_token, positions)
+    if shifts_data:
+        # Process shifts_data as needed
+        print(shifts_data)
+    else:
+        # Handle failed API request
+        pass
