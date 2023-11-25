@@ -15,9 +15,18 @@ Fetch the shift data from Humanity API to create a report on standby shifts
 4. Group df by name to generate new output (Name, Number of shifts, Total hours, Weekday hours, Weekend hours)
 5. Export the output to csv
 '''
-import requests
-import json
+
+## TODO
+# Add break column if shifts hours <> employee hours 
+# Add weekend hours adjusted to shift report to account for breaks
+# Overview report with adjusted hours
+
+
 import datetime
+import json
+
+import pandas as pd
+import requests
 
 # Constants and configurations
 AUTH_URL = 'https://www.humanity.com/oauth2/token.php'
@@ -57,6 +66,53 @@ def get_shifts(start_date, end_date, access_token, positions):
         return None
 
 
+def parse_data(shifts_data):
+    data_list = []
+    for shift in shifts_data['data']:
+        shift_start = shift['start_timestamp']
+        shift_end = shift['end_timestamp']
+        shift_name = shift['schedule_name']
+        
+        for employee in shift['employees']:
+            employee_name = employee['name']
+            employee_hours = employee['paidtime']
+            
+            data_list.append({
+                'Name': employee_name,
+                'Hours': employee_hours,
+                'Shift': shift_name,
+                'Start date': shift_start,
+                'End date': shift_end
+            })
+    return pd.DataFrame(data_list)
+
+
+def calculate_weekday_weekend_hours(start_date, end_date):
+    weekday_hours = []
+    weekend_hours = []
+
+    for i in range(len(start_date)):
+        current_start_date = pd.to_datetime(start_date[i])
+        current_end_date = pd.to_datetime(end_date[i])
+
+        if current_start_date.weekday() < 5 and current_end_date.weekday() < 5:  # Both within weekdays
+            weekday_hours.append((current_end_date - current_start_date).seconds / 3600)
+            weekend_hours.append(0)
+        elif current_start_date.weekday() >= 5 and current_end_date.weekday() >= 5:  # Both within weekends
+            weekend_hours.append((current_end_date - current_start_date).seconds / 3600)
+            weekday_hours.append(0)
+        else:  # Shift spans across weekend and weekdays
+            midnight = current_start_date.replace(hour=0, minute=0, second=0)
+            if current_start_date.weekday() < 5:  # Shift starts on weekday
+                weekday_hours.append((midnight - current_start_date).seconds / 3600)
+                weekend_hours.append((current_end_date - midnight).seconds / 3600)
+            else:  # Shift starts on weekend
+                weekend_hours.append((midnight - current_start_date).seconds / 3600)
+                weekday_hours.append((current_end_date - midnight).seconds / 3600)
+
+    return weekday_hours, weekend_hours
+
+
 if __name__ == '__main__':
     access_token = get_access_token(CREDENTIALS_FILE)
     start_date = datetime.date(2024, 2, 4)
@@ -66,7 +122,35 @@ if __name__ == '__main__':
     shifts_data = get_shifts(start_date, end_date, access_token, positions)
     if shifts_data:
         # Process shifts_data as needed
-        print(shifts_data)
+        shift_report = parse_data(shifts_data)
+        print(shift_report)
+
+        # Grouping by 'Name' and aggregating shift count and total hours
+        overview_report = shift_report.groupby('Name').agg(
+            Number_of_shifts=('Shift', 'count'),
+            Total_hours=('Hours', 'sum')
+        ).reset_index()
+        print(overview_report)
+
+        # Calculate weekday and weekend hours for each shift
+        weekday_hours, weekend_hours = calculate_weekday_weekend_hours(
+            shift_report['Start date'], shift_report['End date']
+        )
+
+        # Add weekday and weekend hours columns to shift_report
+        shift_report['Weekday_hours'] = weekday_hours
+        shift_report['Weekend_hours'] = weekend_hours
+        print(shift_report)
+
+        # Grouping by 'Name' and aggregating shift count, total hours, weekday hours, and weekend hours
+        overview_report = shift_report.groupby('Name').agg(
+            Number_of_shifts=('Shift', 'count'),
+            Total_hours=('Hours', 'sum'),
+            Total_weekday_hours=('Weekday_hours', 'sum'),
+            Total_weekend_hours=('Weekend_hours', 'sum')
+        ).reset_index()
+
+        print(overview_report)
     else:
         # Handle failed API request
         pass
