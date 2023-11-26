@@ -71,7 +71,10 @@ def parse_data(shifts_data):
     for shift in shifts_data['data']:
         shift_start = shift['start_timestamp']
         shift_end = shift['end_timestamp']
-        shift_name = shift['schedule_name']
+        shift_position = shift['schedule_name']
+        shift_pos_id = shift['schedule']
+        shift_title = shift['title']
+        shift_hours = shift['paidtime']
         
         for employee in shift['employees']:
             employee_name = employee['name']
@@ -79,77 +82,117 @@ def parse_data(shifts_data):
             
             data_list.append({
                 'Name': employee_name,
-                'Hours': employee_hours,
-                'Shift': shift_name,
-                'Start date': shift_start,
-                'End date': shift_end
+                'Position': shift_position,
+                'Pos_id': shift_pos_id,
+                'Title': shift_title,
+                'Start_date': shift_start,
+                'End_date': shift_end,
+                'Employee_hours': employee_hours,
+                'Shift_hours': shift_hours,
             })
     return pd.DataFrame(data_list)
+
+
+def calculate_overtime(start_time, end_time):
+    window_start = start_time.replace(hour=9, minute=0, second=0)
+    window_end = start_time.replace(hour=18, minute=0, second=0)
+    
+    # If the start time is after the window end or end time is before the window start
+    if start_time >= window_end or end_time <= window_start:
+        return (end_time - start_time).total_seconds() / 3600  # Total hours outside the window
+    
+    # Calculating the duration outside the window
+    if start_time < window_start:
+        outside_before_start = (window_start - start_time).total_seconds() / 3600
+    else:
+        outside_before_start = 0
+    
+    if end_time > window_end:
+        outside_after_end = (end_time - window_end).total_seconds() / 3600
+    else:
+        outside_after_end = 0
+    
+    overtime = outside_before_start + outside_after_end
+    return overtime
 
 
 def calculate_weekday_weekend_hours(start_date, end_date):
     weekday_hours = []
     weekend_hours = []
+    overtime = []
 
     for i in range(len(start_date)):
-        current_start_date = pd.to_datetime(start_date[i])
-        current_end_date = pd.to_datetime(end_date[i])
-
-        if current_start_date.weekday() < 5 and current_end_date.weekday() < 5:  # Both within weekdays
-            weekday_hours.append((current_end_date - current_start_date).seconds / 3600)
+        start = pd.to_datetime(start_date[i])
+        end = pd.to_datetime(end_date[i])
+        
+        # Shift starts and ends within weekdays
+        if start.weekday() < 5 and end.weekday() < 5:
+            weekday_hours.append((end - start).seconds / 3600)
             weekend_hours.append(0)
-        elif current_start_date.weekday() >= 5 and current_end_date.weekday() >= 5:  # Both within weekends
-            weekend_hours.append((current_end_date - current_start_date).seconds / 3600)
+            # Log overtime for hours outside of business start (9am) to business end (6pm)
+            overtime.append(calculate_overtime(start, end))
+        
+        # Shift starts and ends within weekends
+        elif start.weekday() >= 5 and end.weekday() >= 5:
+            weekend_hours.append((end - start).seconds / 3600)
             weekday_hours.append(0)
-        else:  # Shift spans across weekend and weekdays
-            midnight = current_start_date.replace(hour=0, minute=0, second=0)
-            if current_start_date.weekday() < 5:  # Shift starts on weekday
-                weekday_hours.append((midnight - current_start_date).seconds / 3600)
-                weekend_hours.append((current_end_date - midnight).seconds / 3600)
-            else:  # Shift starts on weekend
-                weekend_hours.append((midnight - current_start_date).seconds / 3600)
-                weekday_hours.append((current_end_date - midnight).seconds / 3600)
-
-    return weekday_hours, weekend_hours
+            # Log all weekend time towards overtime
+            overtime.append((end - start).seconds / 3600)
+        
+        # Shift spans across weekend and weekdays
+        else:
+            midnight = end.replace(hour=0, minute=0, second=0)
+            after_midnight = (end - midnight).seconds / 3600
+            before_midnight = (midnight - start).seconds / 3600
+            # Shift starts on weekday and ends on weekend
+            if start.weekday() < 5:
+                weekday_hours.append(before_midnight)
+                weekend_hours.append(after_midnight)
+                # Log overtime for hours outside of business start (9am) to business end (6pm) starting from start date up till midnight
+                # Log all weekend time towards overtime
+                overtime.append(calculate_overtime(start, midnight) + after_midnight)
+            
+            # Shift starts on weekend and ends on weekday
+            else:
+                weekday_hours.append(after_midnight)
+                weekend_hours.append(before_midnight)         
+                # Log all weekend time towards overtime
+                # Log overtime for hours outside of business start (9am) to business end (6pm) starting from midnight till the end date
+                overtime.append(before_midnight + calculate_overtime(midnight, end))
+    return weekday_hours, weekend_hours, overtime
 
 
 if __name__ == '__main__':
     access_token = get_access_token(CREDENTIALS_FILE)
     start_date = datetime.date(2024, 2, 4)
-    end_date = datetime.date(2024, 2, 5)
-    positions = {'3110230': 'Cisco', '3110228': 'T1', '3110229': 'T2'}
+    end_date = datetime.date(2024, 2, 10)
+    positions = {'3110230': 'Cisco', '3110228': 'T1', '3110229': 'T2', '3110183': 'NCR 1319'}
 
     shifts_data = get_shifts(start_date, end_date, access_token, positions)
     if shifts_data:
         # Process shifts_data as needed
         shift_report = parse_data(shifts_data)
+        shift_report['Break'] = shift_report['Shift_hours'] - shift_report['Employee_hours']
         print(shift_report)
 
-        # Grouping by 'Name' and aggregating shift count and total hours
-        overview_report = shift_report.groupby('Name').agg(
-            Number_of_shifts=('Shift', 'count'),
-            Total_hours=('Hours', 'sum')
-        ).reset_index()
-        print(overview_report)
-
         # Calculate weekday and weekend hours for each shift
-        weekday_hours, weekend_hours = calculate_weekday_weekend_hours(
-            shift_report['Start date'], shift_report['End date']
+        weekday_hours, weekend_hours, overtime = calculate_weekday_weekend_hours(
+            shift_report['Start_date'], shift_report['End_date']
         )
 
         # Add weekday and weekend hours columns to shift_report
         shift_report['Weekday_hours'] = weekday_hours
-        shift_report['Weekend_hours'] = weekend_hours
+        shift_report['Weekend_hours'] = weekend_hours - shift_report['Break']
+        shift_report['Overtime'] = overtime
         print(shift_report)
 
         # Grouping by 'Name' and aggregating shift count, total hours, weekday hours, and weekend hours
         overview_report = shift_report.groupby('Name').agg(
-            Number_of_shifts=('Shift', 'count'),
-            Total_hours=('Hours', 'sum'),
+            Number_of_shifts=('Position', 'count'),
+            Total_hours=('Employee_hours', 'sum'),
             Total_weekday_hours=('Weekday_hours', 'sum'),
             Total_weekend_hours=('Weekend_hours', 'sum')
         ).reset_index()
-
         print(overview_report)
     else:
         # Handle failed API request
