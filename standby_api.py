@@ -48,7 +48,7 @@ def get_shifts(start_date, end_date, access_token, positions):
     params = {
         'start_date': str(start_date),
         'end_date': str(end_date),
-        'mode': 'schedule',
+        'mode': 'overview',
         'schedule': schedule,
         'access_token': access_token
     }
@@ -164,36 +164,41 @@ def calculate_weekday_weekend_hours(start_date, end_date):
 
 if __name__ == '__main__':
     access_token = get_access_token(CREDENTIALS_FILE)
-    start_date = datetime.date(2024, 2, 4)
-    end_date = datetime.date(2024, 2, 10)
+    start_date = datetime.date(2023, 7, 1)
+    end_date = datetime.date(2023, 8, 1)
     positions = {'3110230': 'Cisco', '3110228': 'T1', '3110229': 'T2', '3110183': 'NCR 1319'}
 
     shifts_data = get_shifts(start_date, end_date, access_token, positions)
     if shifts_data:
         # Process shifts_data as needed
         shift_report = parse_data(shifts_data)
-        shift_report['Break'] = shift_report['Shift_hours'] - shift_report['Employee_hours']
-        print(shift_report)
 
         # Calculate weekday and weekend hours for each shift
         weekday_hours, weekend_hours, overtime = calculate_weekday_weekend_hours(
             shift_report['Start_date'], shift_report['End_date']
         )
 
-        # Add weekday and weekend hours columns to shift_report
-        shift_report['Weekday_hours'] = weekday_hours
-        shift_report['Weekend_hours'] = weekend_hours - shift_report['Break']
+        # Add additional columns to shift_report
+        shift_report['Break'] = shift_report['Shift_hours'] - shift_report['Employee_hours']
+        # Account for missing breaks
+        condition = (shift_report['Pos_id'] == '3110228') & (shift_report['Title'] == 'Morning/Day') & (shift_report['Break'] == 0)
+        shift_report.loc[condition, 'Employee_hours'] -= 9.0
+        shift_report.loc[condition, 'Break'] = 9.0
+        
+        shift_report['Weekday_hours'] = weekday_hours - shift_report['Break']
+        shift_report['Weekend_hours'] = weekend_hours
         shift_report['Overtime'] = overtime
         print(shift_report)
 
+        # Standby report
         # Grouping by 'Name' and aggregating shift count, total hours, weekday hours, and weekend hours
-        overview_report = shift_report.groupby('Name').agg(
+        standby_report = shift_report.groupby('Name').agg(
             Number_of_shifts=('Position', 'count'),
             Total_hours=('Employee_hours', 'sum'),
             Total_weekday_hours=('Weekday_hours', 'sum'),
             Total_weekend_hours=('Weekend_hours', 'sum')
         ).reset_index()
-        print(overview_report)
+        print(standby_report)
     else:
         # Handle failed API request
         pass
