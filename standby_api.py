@@ -41,14 +41,43 @@ def get_access_token(credentials_file):
     response = requests.post(url=AUTH_URL, data=credentials)
     return json.loads(response.text)['access_token']
 
+def get_positions(access_token):
+    # Construct API URL
+    url = f'{API_BASE_URL}/positions'
+    headers = {"accept": "application/json"}
+    params = {'access_token': access_token}
 
-def get_shifts(start_date, end_date, access_token, positions):
+    # Get position data
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        data_dict = {}
+        for index, position in enumerate(response.json()['data']):
+            pos_id = position['id']
+            pos_name = position['name']
+            try:
+                location = position['location']['name']
+            except KeyError:
+                location = 'Internal'
+
+            data_dict[index] = {
+                'name': pos_name,
+                'id': str(pos_id),
+                'location': location
+            }
+
+        return data_dict
+    else:
+        print(f"Failed to retrieve shifts. Status code: {response.status_code}")
+        return None
+
+
+def get_shifts(start_date, end_date, access_token, positions={}, mode='overview'):
     # Format URL parameters
     schedule = ', '.join(positions.keys())
     params = {
         'start_date': str(start_date),
         'end_date': str(end_date),
-        'mode': 'overview',
+        'mode': mode,
         'schedule': schedule,
         'access_token': access_token
     }
@@ -180,13 +209,25 @@ def calculate_weekday_weekend_hours(start_date, end_date):
     return weekday_hours, weekend_hours, overtime
 
 
+def filter_include(df, positions):
+    with open('./output/positions.json') as json_file:
+        data = json.load(json_file)
+    pos_id = [entry['id'] for entry in data.values() if entry['name'] in positions]
+    return df[df['Pos_id'].isin(pos_id)]
+        
+
 if __name__ == '__main__':
     access_token = get_access_token(CREDENTIALS_FILE)
-    start_date = datetime.date(2023, 7, 5)
-    end_date = datetime.date(2023, 7, 5)
-    positions = {'3110230': 'Cisco', '3110228': 'T1', '3110229': 'T2', '3110183': 'NCR 1319'}
+    # Get position data and save to csv if needed
+    # positions = get_positions(access_token)
+    # if isinstance(positions, dict):
+    #     with open('./output/positions.json', 'w') as json_file:
+    #         json.dump(positions, json_file, indent=2)
 
-    shifts_data = get_shifts(start_date, end_date, access_token, positions)
+    start_date = datetime.date(2023, 11, 1)
+    end_date = datetime.date(2023, 11, 30)
+    
+    shifts_data = get_shifts(start_date, end_date, access_token)
     if shifts_data:
         # Process shifts_data as needed
         shift_report = parse_data(shifts_data)
@@ -210,12 +251,20 @@ if __name__ == '__main__':
 
         # Standby report
         # Grouping by 'Name' and aggregating shift count, total hours, weekday hours, and weekend hours
-        standby_report = shift_report.groupby('Name').agg(
+        positions = 'NCR (DCS) 1319'
+        filtered_shift_report = filter_include(shift_report, positions)
+        standby_report = filtered_shift_report.groupby('Name').agg(
             Number_of_shifts=('Position', 'count'),
             Total_hours=('Employee_hours', 'sum'),
             Total_weekday_hours=('Weekday_hours', 'sum'),
             Total_weekend_hours=('Weekend_hours', 'sum')
         ).reset_index()
+
+        # Formatting the columns with floating-point numbers to two decimal places
+        standby_report['Total_hours'] = standby_report['Total_hours'].round(2)
+        standby_report['Total_weekday_hours'] = standby_report['Total_weekday_hours'].round(2)
+        standby_report['Total_weekend_hours'] = standby_report['Total_weekend_hours'].round(2)
+
         print(standby_report)
     else:
         # Handle failed API request
