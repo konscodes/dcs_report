@@ -76,20 +76,38 @@ def parse_data(shifts_data):
         shift_title = shift['title']
         shift_hours = shift['paidtime']
         
-        for employee in shift['employees']:
-            employee_name = employee['name']
-            employee_hours = employee['paidtime']
-            
-            data_list.append({
-                'Name': employee_name,
-                'Position': shift_position,
-                'Pos_id': shift_pos_id,
-                'Title': shift_title,
-                'Start_date': shift_start,
-                'End_date': shift_end,
-                'Employee_hours': employee_hours,
-                'Shift_hours': shift_hours,
-            })
+        # Check if there are employees assigned
+        if shift['employees']:
+            for employee in shift['employees']:
+                employee_name = employee['name']
+                employee_hours = employee['paidtime']
+                
+                data_list.append({
+                    'Name': employee_name,
+                    'Position': shift_position,
+                    'Pos_id': shift_pos_id,
+                    'Title': shift_title,
+                    'Start_date': shift_start,
+                    'End_date': shift_end,
+                    'Employee_hours': employee_hours,
+                    'Shift_hours': shift_hours,
+                })
+        
+        # Account for OnCall shifts
+        if 'employeesOnCall' in shift:
+            for employee in shift['employeesOnCall']:
+                employee_name = employee['name']
+                
+                data_list.append({
+                    'Name': employee_name,
+                    'Position': shift_position,
+                    'Pos_id': shift_pos_id,
+                    'Title': shift_title,
+                    'Start_date': shift_start,
+                    'End_date': shift_end,
+                    'Employee_hours': shift_hours,
+                    'Shift_hours': shift_hours,
+                })
     return pd.DataFrame(data_list)
 
 
@@ -164,8 +182,8 @@ def calculate_weekday_weekend_hours(start_date, end_date):
 
 if __name__ == '__main__':
     access_token = get_access_token(CREDENTIALS_FILE)
-    start_date = datetime.date(2023, 7, 1)
-    end_date = datetime.date(2023, 8, 1)
+    start_date = datetime.date(2023, 7, 5)
+    end_date = datetime.date(2023, 7, 5)
     positions = {'3110230': 'Cisco', '3110228': 'T1', '3110229': 'T2', '3110183': 'NCR 1319'}
 
     shifts_data = get_shifts(start_date, end_date, access_token, positions)
