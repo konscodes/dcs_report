@@ -37,21 +37,21 @@ POSITIONS_FILE = './output/positions.json'
 OUTPUT_REPORT_PATH = './output/report_'
 
 # Function to handle error response from API
-def handle_api_error(response):
+def handle_api_error(response: requests.Response) -> None:
     if response.status_code != 200:
         raise Exception(f"Failed to retrieve data. Status code: {response.status_code}")
 
 # Function to retrieve access token using provided credentials
-def get_access_token(credentials_file):
+def get_access_token(credentials_file: str) -> str:
     # Retrieve access token using provided credentials
     with open(credentials_file) as json_file:
         credentials = json.load(json_file)
     
     response = requests.post(url=AUTH_URL, data=credentials)
     handle_api_error(response)
-    return json.loads(response.text)['access_token']
+    return json.loads(response.text).get('access_token')
 
-def get_positions(access_token):
+def get_positions(access_token: str) -> dict | None:
     # Construct API URL
     url = f'{API_BASE_URL}/positions'
     headers = {"accept": "application/json"}
@@ -74,7 +74,7 @@ def get_positions(access_token):
         return None
 
 
-def get_shifts(start_date, end_date, access_token, positions={}, mode='overview'):
+def get_shifts(start_date: datetime.date, end_date: datetime.date, access_token: str, positions={}, mode='overview') -> dict | None:
     # Format URL parameters
     schedule = ', '.join(positions.keys())
     params = {
@@ -98,7 +98,7 @@ def get_shifts(start_date, end_date, access_token, positions={}, mode='overview'
         return None
 
 
-def parse_data(shifts_data):
+def parse_data(shifts_data: dict) -> pd.DataFrame:
     data_list = []
     for shift in shifts_data['data']:
         shift_start = shift['start_timestamp']
@@ -143,7 +143,7 @@ def parse_data(shifts_data):
     return pd.DataFrame(data_list)
 
 
-def calculate_overtime(start_time, end_time):
+def calculate_overtime(start_time: pd.Timestamp, end_time: pd.Timestamp) -> float:
     window_start = start_time.replace(hour=9, minute=0, second=0)
     window_end = start_time.replace(hour=18, minute=0, second=0)
     
@@ -166,14 +166,18 @@ def calculate_overtime(start_time, end_time):
     return overtime
 
 
-def calculate_weekday_weekend_hours(start_date, end_date):
-    weekday_hours = []
-    weekend_hours = []
-    overtime = []
+def calculate_weekday_weekend_hours(start_dates: pd.Series, end_dates: pd.Series) -> tuple:
+    weekday_hours: list[float] = []
+    weekend_hours: list[float] = []
+    overtime: list[float] = []
+
+    # Ensure start_date and end_date are Pandas Series of Timestamps
+    start_date = pd.to_datetime(start_dates)
+    end_date = pd.to_datetime(end_dates)
 
     for i in range(len(start_date)):
-        start = pd.to_datetime(start_date[i])
-        end = pd.to_datetime(end_date[i])
+        start: pd.Timestamp = start_date.iloc[i]
+        end: pd.Timestamp = end_date.iloc[i]
         
         # Shift starts and ends within weekdays
         if start.weekday() < 5 and end.weekday() < 5:
@@ -212,11 +216,22 @@ def calculate_weekday_weekend_hours(start_date, end_date):
     return weekday_hours, weekend_hours, overtime
 
 
-def filter_include(df, positions):
+def filter_include(df: pd.DataFrame, positions: tuple) -> pd.DataFrame:
+    '''Return filtered Series where position includes given position names
+
+    Args:
+        df (pd.DataFrame): Shifts DataFrame to be filtered 
+        positions (tuple): List of position names to match against
+
+    Returns:
+        pd.DataFrame: Filtered Series
+    '''
     with open('./output/positions.json') as json_file:
         data = json.load(json_file)
     pos_id = [entry['id'] for entry in data.values() if entry['name'] in positions]
-    return df[df['Pos_id'].isin(pos_id)]
+    
+    filtered_df = df[df['Pos_id'].isin(pos_id)]
+    return pd.DataFrame(filtered_df)
         
 
 if __name__ == '__main__':
@@ -234,10 +249,13 @@ if __name__ == '__main__':
     if shifts_data:
         # Process shifts_data as needed
         shift_report = parse_data(shifts_data)
-
+        
         # Calculate weekday and weekend hours for each shift
+        start_dates = shift_report.loc[:, 'Start_date']
+        end_dates = shift_report.loc[:, 'End_date']
+
         weekday_hours, weekend_hours, overtime = calculate_weekday_weekend_hours(
-            shift_report['Start_date'], shift_report['End_date']
+            start_dates, end_dates
         )
 
         # Add additional columns to shift_report
