@@ -1,27 +1,28 @@
 '''
 Fetch the shift data from Humanity API to create a report on standby shifts
-1. Create pandas df (Name, Hours, Shift, Start date, End date)
-2. Request the shift data from Humanity API
+1. Create pandas df for shifts (Name, Position, Pos_id, Title, Start date, End date, Employee_hours, Shift_hours)
+2. Request the overview of shift data from Humanity API
+    - auth with API using credentials and token
     - specify period (start date to end date)
-    - specify positions (api accepts id)
-3. Parse the response data and insert items into pandas df
+    - optionally request a position data from API to save store locally as a json
+3. Parse the response data and insert items into pandas df for shifts
     Each data point has employees
         For each employee in this data point add and entry into df and include
             - employees name (Name)
-            - employees paidtime (Hours)
-            - data schedule_name (Shift)
+            - employees paidtime (Employee_hours) hours accounting for break
+            - data schedule_name (Position)
+            - data schedule (Pos_id)
+            - data title (Title)
+            - data paidtime (Shift_hours) total hours scheduled
             - data start_timestamp (Start date)
             - data end_timestamp (End date)
-4. Group df by name to generate new output (Name, Number of shifts, Total hours, Weekday hours, Weekend hours)
-5. Export the output to csv
+4. Process shift data to separate hours
+    - weekend hours
+    - weekday hours
+    - overtime outside business hours (9:00 to 18:00)
+4. Group shifts df by name to generate a report (Name, Number of shifts, Total hours, Weekday hours, Weekend hours)
+5. Export the report to csv
 '''
-
-## TODO
-# Add break column if shifts hours <> employee hours 
-# Add weekend hours adjusted to shift report to account for breaks
-# Overview report with adjusted hours
-
-
 import datetime
 import json
 
@@ -32,13 +33,22 @@ import requests
 AUTH_URL = 'https://www.humanity.com/oauth2/token.php'
 API_BASE_URL = 'https://www.humanity.com/api/v2'
 CREDENTIALS_FILE = './auth/credentials.json'
+POSITIONS_FILE = './output/positions.json'
+OUTPUT_REPORT_PATH = './output/report_'
 
+# Function to handle error response from API
+def handle_api_error(response):
+    if response.status_code != 200:
+        raise Exception(f"Failed to retrieve data. Status code: {response.status_code}")
+
+# Function to retrieve access token using provided credentials
 def get_access_token(credentials_file):
     # Retrieve access token using provided credentials
     with open(credentials_file) as json_file:
         credentials = json.load(json_file)
     
     response = requests.post(url=AUTH_URL, data=credentials)
+    handle_api_error(response)
     return json.loads(response.text)['access_token']
 
 def get_positions(access_token):
@@ -50,22 +60,15 @@ def get_positions(access_token):
     # Get position data
     response = requests.get(url, headers=headers, params=params)
     if response.status_code == 200:
-        data_dict = {}
-        for index, position in enumerate(response.json()['data']):
-            pos_id = position['id']
-            pos_name = position['name']
-            try:
-                location = position['location']['name']
-            except KeyError:
-                location = 'Internal'
-
-            data_dict[index] = {
-                'name': pos_name,
-                'id': str(pos_id),
-                'location': location
+        position_data = response.json().get('data')
+        positions_dict = {}
+        for index, position in enumerate(position_data):
+            positions_dict[index] = {
+                'id': str(position.get('id')),
+                'name': position.get('name'),
+                'location': position['location'].get('name', 'Internal') if 'location' in position else 'Internal'
             }
-
-        return data_dict
+        return positions_dict
     else:
         print(f"Failed to retrieve shifts. Status code: {response.status_code}")
         return None
@@ -219,10 +222,10 @@ def filter_include(df, positions):
 if __name__ == '__main__':
     access_token = get_access_token(CREDENTIALS_FILE)
     # Get position data and save to csv if needed
-    # positions = get_positions(access_token)
-    # if isinstance(positions, dict):
-    #     with open('./output/positions.json', 'w') as json_file:
-    #         json.dump(positions, json_file, indent=2)
+    positions = get_positions(access_token)
+    if isinstance(positions, dict):
+        with open(POSITIONS_FILE, 'w') as json_file:
+            json.dump(positions, json_file, indent=2)
 
     start_date = datetime.date(2023, 11, 1)
     end_date = datetime.date(2023, 11, 30)
@@ -251,7 +254,7 @@ if __name__ == '__main__':
 
         # Standby report
         # Grouping by 'Name' and aggregating shift count, total hours, weekday hours, and weekend hours
-        positions = 'NCR (DCS) 1319'
+        positions = '24/7 Cisco Urgent', '24/7 T1 Urgent', '24/7 T2 Planned/Backup'
         filtered_shift_report = filter_include(shift_report, positions)
         standby_report = filtered_shift_report.groupby('Name').agg(
             Number_of_shifts=('Position', 'count'),
@@ -266,6 +269,13 @@ if __name__ == '__main__':
         standby_report['Total_weekend_hours'] = standby_report['Total_weekend_hours'].round(2)
 
         print(standby_report)
+        timeline = f'{start_date.strftime("%Y-%m-%d")}_{end_date.strftime("%Y-%m-%d")}'
+        output_path = f'./output/report_{timeline}'
+        comment = f'This report includes positions: {positions} for the time period of {timeline}'
+        # Save the report to a CSV file with a comment
+        with open(output_path, 'w') as f:
+            f.write('# ' + comment + '\n')
+            standby_report.to_csv(f, index=False)
     else:
         # Handle failed API request
         pass
