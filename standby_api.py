@@ -141,35 +141,37 @@ def parse_data(shifts_data: dict) -> pd.DataFrame:
     return pd.DataFrame(data_list)
 
 
-def calculate_overtime(start_time: pd.Timestamp, end_time: pd.Timestamp) -> float:
-    window_start = start_time.replace(hour=9, minute=0, second=0)
-    window_end = start_time.replace(hour=18, minute=0, second=0)
+def calculate_overtime(shift_start: pd.Timestamp, shift_end: pd.Timestamp) -> float:
+    '''Assuming only weekdays, return total overtime outside of business hours
+
+    Args:
+        shift_start (pd.Timestamp): Start of the shift
+        shift_end (pd.Timestamp): End of the shift
+
+    Returns:
+        float: Total overtime
+    '''
+    bau_start = shift_start.replace(hour=9, minute=0, second=0)
+    bau_end = shift_start.replace(hour=18, minute=0, second=0)
     
-    # If the start time is after the window end or end time is before the window start
-    if start_time >= window_end or end_time <= window_start:
-        return (end_time - start_time).total_seconds() / 3600  # Total hours outside the window
+    # If the start time is after the bau end or end time is before the bau start
+    if shift_start >= bau_end or shift_end <= bau_start:
+        return (shift_end - shift_start).total_seconds() / 3600  # Total hours outside the bau
     
-    # Calculating the duration outside the window
-    if start_time < window_start:
-        outside_before_start = (window_start - start_time).total_seconds() / 3600
-    else:
-        outside_before_start = 0
+    # Calculating the duration outside the bau
+    before_bau = max(0, (bau_start - shift_start).total_seconds() / 3600)
+    after_bau = max(0, (shift_end - bau_end).total_seconds() / 3600)
     
-    if end_time > window_end:
-        outside_after_end = (end_time - window_end).total_seconds() / 3600
-    else:
-        outside_after_end = 0
-    
-    overtime = outside_before_start + outside_after_end
+    overtime = before_bau + after_bau
     return overtime
 
 
-def separate_hours(start_dates: pd.Series, end_dates: pd.Series) -> tuple:
+def separate_hours(shift_start_dates: pd.Series, shift_end_dates: pd.Series) -> tuple:
     '''Analyze given start and end Series and return a breakdown into weekend, weekday and overtime for each pair
 
     Args:
-        start_dates (pd.Series): Series of start dates for each shift
-        end_dates (pd.Series): Series of end dates for each shift
+        shift_start_dates (pd.Series): Series of start dates for each shift
+        shift_end_dates (pd.Series): Series of end dates for each shift
 
     Returns:
         tuple (list[float], list[float], list[float]): weekday_hours, weekend_hours, overtime
@@ -178,40 +180,40 @@ def separate_hours(start_dates: pd.Series, end_dates: pd.Series) -> tuple:
     weekend_hours: list[float] = []
     overtime: list[float] = []
 
-    # Ensure start_date and end_date are Pandas Series of Timestamps
-    start_date = pd.to_datetime(start_dates)
-    end_date = pd.to_datetime(end_dates)
+    # Ensure shift_start_dates and end_date are Pandas Series of Timestamps
+    shift_start_dates = pd.to_datetime(shift_start_dates)
+    shift_end_dates = pd.to_datetime(shift_end_dates)
 
-    for i in range(len(start_date)):
-        start: pd.Timestamp = start_date.iloc[i]
-        end: pd.Timestamp = end_date.iloc[i]
+    for i in range(len(shift_start_dates)):
+        shift_start: pd.Timestamp = shift_start_dates.iloc[i]
+        shift_end: pd.Timestamp = shift_end_dates.iloc[i]
         
         # Shift starts and ends within weekdays
-        if start.weekday() < 5 and end.weekday() < 5:
-            weekday_hours.append((end - start).seconds / 3600)
+        if shift_start.weekday() < 5 and shift_end.weekday() < 5:
+            weekday_hours.append((shift_end - shift_start).seconds / 3600)
             weekend_hours.append(0)
             # Log overtime for hours outside of business start (9am) to business end (6pm)
-            overtime.append(calculate_overtime(start, end))
+            overtime.append(calculate_overtime(shift_start, shift_end))
         
         # Shift starts and ends within weekends
-        elif start.weekday() >= 5 and end.weekday() >= 5:
-            weekend_hours.append((end - start).seconds / 3600)
+        elif shift_start.weekday() >= 5 and shift_end.weekday() >= 5:
+            weekend_hours.append((shift_end - shift_start).seconds / 3600)
             weekday_hours.append(0)
             # Log all weekend time towards overtime
-            overtime.append((end - start).seconds / 3600)
+            overtime.append((shift_end - shift_start).seconds / 3600)
         
         # Shift spans across weekend and weekdays
         else:
-            midnight = end.replace(hour=0, minute=0, second=0)
-            after_midnight = (end - midnight).seconds / 3600
-            before_midnight = (midnight - start).seconds / 3600
+            midnight = shift_end.replace(hour=0, minute=0, second=0)
+            after_midnight = (shift_end - midnight).seconds / 3600
+            before_midnight = (midnight - shift_start).seconds / 3600
             # Shift starts on weekday and ends on weekend
-            if start.weekday() < 5:
+            if shift_start.weekday() < 5:
                 weekday_hours.append(before_midnight)
                 weekend_hours.append(after_midnight)
                 # Log overtime for hours outside of business start (9am) to business end (6pm) starting from start date up till midnight
                 # Log all weekend time towards overtime
-                overtime.append(calculate_overtime(start, midnight) + after_midnight)
+                overtime.append(calculate_overtime(shift_start, midnight) + after_midnight)
             
             # Shift starts on weekend and ends on weekday
             else:
@@ -219,7 +221,7 @@ def separate_hours(start_dates: pd.Series, end_dates: pd.Series) -> tuple:
                 weekend_hours.append(before_midnight)         
                 # Log all weekend time towards overtime
                 # Log overtime for hours outside of business start (9am) to business end (6pm) starting from midnight till the end date
-                overtime.append(before_midnight + calculate_overtime(midnight, end))
+                overtime.append(before_midnight + calculate_overtime(midnight, shift_end))
     return weekday_hours, weekend_hours, overtime
 
 
