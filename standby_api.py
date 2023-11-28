@@ -74,20 +74,20 @@ def get_positions(access_token: str) -> dict | None:
         return None
 
 
-def get_shifts(start_date: datetime.date, end_date: datetime.date, access_token: str, positions={}, mode='overview') -> dict | None:
+def get_shifts(start_date: datetime.date, end_date: datetime.date, access_token: str, positions: dict = {}, mode: str = 'overview') -> dict | None:
+    # Construct API URL
+    url = f'{API_BASE_URL}/shifts'
+    headers = {"accept": "application/json"}
+
     # Format URL parameters
-    schedule = ', '.join(positions.keys())
     params = {
         'start_date': str(start_date),
         'end_date': str(end_date),
         'mode': mode,
-        'schedule': schedule,
         'access_token': access_token
     }
-
-    # Construct API URL
-    url = f'{API_BASE_URL}/shifts'
-    headers = {"accept": "application/json"}
+    if positions:
+        params['schedule'] = ', '.join(positions.keys())
 
     # Get shift data
     response = requests.get(url, headers=headers, params=params)
@@ -99,6 +99,14 @@ def get_shifts(start_date: datetime.date, end_date: datetime.date, access_token:
 
 
 def parse_data(shifts_data: dict) -> pd.DataFrame:
+    '''Parse shift data into pandas DataFrame
+
+    Args:
+        shifts_data (dict): Shift data dict received from API
+
+    Returns:
+        pd.DataFrame: Shifts DataFrame
+    '''
     data_list = []
     for shift in shifts_data['data']:
         shift_start = shift['start_timestamp']
@@ -107,39 +115,29 @@ def parse_data(shifts_data: dict) -> pd.DataFrame:
         shift_pos_id = shift['schedule']
         shift_title = shift['title']
         shift_hours = shift['paidtime']
-        
-        # Check if there are employees assigned
-        if shift['employees']:
+
+        def add_data(employee_name, employee_hours):
+            data_list.append({
+                'Name': employee_name,
+                'Position': shift_position,
+                'Pos_id': shift_pos_id,
+                'Title': shift_title,
+                'Start_date': shift_start,
+                'End_date': shift_end,
+                'Employee_hours': employee_hours,
+                'Shift_hours': shift_hours,
+            })
+
+        # Check if 'employees' key exists and is a list
+        if 'employees' in shift and isinstance(shift['employees'], list):
             for employee in shift['employees']:
-                employee_name = employee['name']
-                employee_hours = employee['paidtime']
-                
-                data_list.append({
-                    'Name': employee_name,
-                    'Position': shift_position,
-                    'Pos_id': shift_pos_id,
-                    'Title': shift_title,
-                    'Start_date': shift_start,
-                    'End_date': shift_end,
-                    'Employee_hours': employee_hours,
-                    'Shift_hours': shift_hours,
-                })
-        
+                add_data(employee['name'], employee['paidtime'])
+
         # Account for OnCall shifts
-        if 'employeesOnCall' in shift:
+        if 'employeesOnCall' in shift and isinstance(shift['employeesOnCall'], list):
             for employee in shift['employeesOnCall']:
-                employee_name = employee['name']
-                
-                data_list.append({
-                    'Name': employee_name,
-                    'Position': shift_position,
-                    'Pos_id': shift_pos_id,
-                    'Title': shift_title,
-                    'Start_date': shift_start,
-                    'End_date': shift_end,
-                    'Employee_hours': shift_hours,
-                    'Shift_hours': shift_hours,
-                })
+                add_data(employee['name'], shift_hours)
+
     return pd.DataFrame(data_list)
 
 
@@ -166,7 +164,16 @@ def calculate_overtime(start_time: pd.Timestamp, end_time: pd.Timestamp) -> floa
     return overtime
 
 
-def calculate_weekday_weekend_hours(start_dates: pd.Series, end_dates: pd.Series) -> tuple:
+def separate_hours(start_dates: pd.Series, end_dates: pd.Series) -> tuple:
+    '''Analyze given start and end Series and return a breakdown into weekend, weekday and overtime for each pair
+
+    Args:
+        start_dates (pd.Series): Series of start dates for each shift
+        end_dates (pd.Series): Series of end dates for each shift
+
+    Returns:
+        tuple (list[float], list[float], list[float]): weekday_hours, weekend_hours, overtime
+    '''
     weekday_hours: list[float] = []
     weekend_hours: list[float] = []
     overtime: list[float] = []
@@ -242,10 +249,10 @@ if __name__ == '__main__':
         with open(POSITIONS_FILE, 'w') as json_file:
             json.dump(positions, json_file, indent=2)
 
-    start_date = datetime.date(2023, 11, 1)
-    end_date = datetime.date(2023, 11, 30)
+    report_start_date = datetime.date(2023, 11, 1)
+    report_end_date = datetime.date(2023, 11, 30)
     
-    shifts_data = get_shifts(start_date, end_date, access_token)
+    shifts_data = get_shifts(report_start_date, report_end_date, access_token)
     if shifts_data:
         # Process shifts_data as needed
         shift_report = parse_data(shifts_data)
@@ -254,7 +261,7 @@ if __name__ == '__main__':
         start_dates = shift_report.loc[:, 'Start_date']
         end_dates = shift_report.loc[:, 'End_date']
 
-        weekday_hours, weekend_hours, overtime = calculate_weekday_weekend_hours(
+        weekday_hours, weekend_hours, overtime = separate_hours(
             start_dates, end_dates
         )
 
@@ -287,7 +294,7 @@ if __name__ == '__main__':
         standby_report['Total_weekend_hours'] = standby_report['Total_weekend_hours'].round(2)
 
         print(standby_report)
-        timeline = f'{start_date.strftime("%Y-%m-%d")}_{end_date.strftime("%Y-%m-%d")}'
+        timeline = f'{report_start_date.strftime("%Y-%m-%d")}_{report_end_date.strftime("%Y-%m-%d")}'
         output_path = f'./output/report_{timeline}'
         comment = f'This report includes positions: {positions} for the time period of {timeline}'
         # Save the report to a CSV file with a comment
