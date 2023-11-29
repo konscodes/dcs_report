@@ -162,3 +162,5 @@ cython_debug/
 # Project files
 output
 auth
+
+.DS_Store
