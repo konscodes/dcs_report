@@ -251,8 +251,8 @@ if __name__ == '__main__':
         with open(POSITIONS_FILE, 'w') as json_file:
             json.dump(positions, json_file, indent=2)
 
-    report_start_date = datetime.date(2023, 11, 1)
-    report_end_date = datetime.date(2023, 11, 30)
+    report_start_date = datetime.date(2023, 7, 1)
+    report_end_date = datetime.date(2023, 9, 3)
     
     shifts_data = get_shifts(report_start_date, report_end_date, access_token)
     if shifts_data:
@@ -279,7 +279,7 @@ if __name__ == '__main__':
         shift_report['Overtime'] = overtime
         print(shift_report)
 
-        # Standby report
+        ## Standby report ##
         # Grouping by 'Name' and aggregating shift count, total hours, weekday hours, and weekend hours
         positions = '24/7 Cisco Urgent', '24/7 T1 Urgent', '24/7 T2 Planned/Backup'
         filtered_shift_report = filter_include(shift_report, positions)
@@ -297,12 +297,20 @@ if __name__ == '__main__':
 
         print(standby_report)
         timeline = f'{report_start_date.strftime("%Y-%m-%d")}_{report_end_date.strftime("%Y-%m-%d")}'
-        output_path = f'./output/report_{timeline}'
-        comment = f'This report includes positions: {positions} for the time period of {timeline}'
+        output_path = f'./output/report_{timeline}.csv'
+        comment = f'This report includes positions: {"; ".join(positions)} for the time period of {timeline}'
         # Save the report to a CSV file with a comment
         with open(output_path, 'w') as f:
             f.write('# ' + comment + '\n')
             standby_report.to_csv(f, index=False)
-    else:
-        # Handle failed API request
-        pass
+
+        ## Timesheet report ##
+        # TODO 
+        # Add shift notes to the shift report (or replace shift report with different data that includes notes)
+        # Similar to positions fetch employee list with ids and emails
+        # Create new timesheet report df
+        # For each employee in a shift report
+        #     - Include Date, Position, Start time, End time, Overtime, Shift Title, Notes
+        #     - Group and sort by date
+        #     - Save the output to csv
+        
