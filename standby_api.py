@@ -109,6 +109,7 @@ def parse_data(shifts_data: dict) -> pd.DataFrame:
     '''
     data_list = []
     for shift in shifts_data['data']:
+        shift_id = shift['id']
         shift_start = shift['start_timestamp']
         shift_end = shift['end_timestamp']
         shift_position = shift['schedule_name']
@@ -118,6 +119,7 @@ def parse_data(shifts_data: dict) -> pd.DataFrame:
 
         def add_data(employee_name, employee_hours):
             data_list.append({
+                'Shift_id': shift_id,
                 'Name': employee_name,
                 'Position': shift_position,
                 'Pos_id': shift_pos_id,
@@ -251,8 +253,8 @@ if __name__ == '__main__':
         with open(POSITIONS_FILE, 'w') as json_file:
             json.dump(positions, json_file, indent=2)
 
-    report_start_date = datetime.date(2023, 7, 1)
-    report_end_date = datetime.date(2023, 9, 3)
+    report_start_date = datetime.date(2023, 11, 1)
+    report_end_date = datetime.date(2023, 11, 30)
     
     shifts_data = get_shifts(report_start_date, report_end_date, access_token)
     if shifts_data:
