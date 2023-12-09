@@ -192,23 +192,23 @@ def separate_hours(shift_start_dates: pd.Series, shift_end_dates: pd.Series) -> 
         
         # Shift starts and ends within weekdays
         if shift_start.weekday() < 5 and shift_end.weekday() < 5:
-            weekday_hours.append((shift_end - shift_start).seconds / 3600)
+            weekday_hours.append((shift_end - shift_start).total_seconds() / 3600)
             weekend_hours.append(0)
             # Log overtime for hours outside of business start (9am) to business end (6pm)
             overtime.append(calculate_overtime(shift_start, shift_end))
         
         # Shift starts and ends within weekends
         elif shift_start.weekday() >= 5 and shift_end.weekday() >= 5:
-            weekend_hours.append((shift_end - shift_start).seconds / 3600)
+            weekend_hours.append((shift_end - shift_start).total_seconds() / 3600)
             weekday_hours.append(0)
             # Log all weekend time towards overtime
-            overtime.append((shift_end - shift_start).seconds / 3600)
+            overtime.append((shift_end - shift_start).total_seconds() / 3600)
         
         # Shift spans across weekend and weekdays
         else:
             midnight = shift_end.replace(hour=0, minute=0, second=0)
-            after_midnight = (shift_end - midnight).seconds / 3600
-            before_midnight = (midnight - shift_start).seconds / 3600
+            after_midnight = (shift_end - midnight).total_seconds() / 3600
+            before_midnight = (midnight - shift_start).total_seconds() / 3600
             # Shift starts on weekday and ends on weekend
             if shift_start.weekday() < 5:
                 weekday_hours.append(before_midnight)
@@ -253,8 +253,8 @@ if __name__ == '__main__':
         with open(POSITIONS_FILE, 'w') as json_file:
             json.dump(positions, json_file, indent=2)
 
-    report_start_date = datetime.date(2023, 11, 1)
-    report_end_date = datetime.date(2023, 11, 30)
+    report_start_date = datetime.date(2022, 2, 1)
+    report_end_date = datetime.date(2022, 2, 28)
     
     shifts_data = get_shifts(report_start_date, report_end_date, access_token)
     if shifts_data:
@@ -272,7 +272,7 @@ if __name__ == '__main__':
         # Add additional columns to shift_report
         shift_report['Break'] = shift_report['Shift_hours'] - shift_report['Employee_hours']
         # Account for missing breaks
-        condition = (shift_report['Pos_id'] == '3110228') & (shift_report['Title'] == 'Morning/Day') & (shift_report['Break'] == 0)
+        condition = (shift_report['Pos_id'].isin(['3110228', '3115140'])) & (shift_report['Title'] == 'Morning/Day') & (shift_report['Break'] == 0)
         shift_report.loc[condition, 'Employee_hours'] -= 9.0
         shift_report.loc[condition, 'Break'] = 9.0
         
@@ -283,7 +283,7 @@ if __name__ == '__main__':
 
         ## Standby report ##
         # Grouping by 'Name' and aggregating shift count, total hours, weekday hours, and weekend hours
-        positions = '24/7 Cisco Urgent', '24/7 T1 Urgent', '24/7 T2 Planned/Backup'
+        positions = '24/7 T1 Urgent', '24/7 O1 Urgent', '24/7 Cisco Urgent', '24/7 O2 Planned/Backup', '24/7 T2 Planned/Backup'
         filtered_shift_report = filter_include(shift_report, positions)
         standby_report = filtered_shift_report.groupby('Name').agg(
             Number_of_shifts=('Position', 'count'),
