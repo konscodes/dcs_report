@@ -23,6 +23,7 @@ Fetch the shift data from Humanity API to create a report on standby shifts
 4. Group shifts df by name to generate a report (Name, Number of shifts, Total hours, Weekday hours, Weekend hours)
 5. Export the report to csv
 '''
+import argparse
 import datetime
 import json
 
@@ -35,6 +36,24 @@ API_BASE_URL = 'https://www.humanity.com/api/v2'
 CREDENTIALS_FILE = './auth/credentials.json'
 POSITIONS_FILE = './positions.json'
 OUTPUT_REPORT_PATH = './output/report_'
+
+
+def get_date(date_str):
+    try:
+        return datetime.datetime.strptime(date_str, "%m.%d.%Y").date()
+    except ValueError:
+        raise argparse.ArgumentTypeError("Invalid date format. Use mm.dd.yyyy")
+
+
+def last_month_first_day():
+    today = datetime.date.today()
+    last_month = today.replace(day=1) - datetime.timedelta(days=1)
+    return last_month.replace(day=1)
+
+
+def last_month_last_day():
+    today = datetime.date.today()
+    return today.replace(day=1) - datetime.timedelta(days=1)
 
 
 # Function to handle error response from API
@@ -277,8 +296,22 @@ if __name__ == '__main__':
         with open(POSITIONS_FILE, 'w') as json_file:
             json.dump(positions, json_file, indent=2)
 
-    report_start_date = datetime.date(2024, 2, 1)
-    report_end_date = datetime.date(2024, 2, 28)
+    #report_start_date = datetime.date(2024, 2, 1)
+    parser = argparse.ArgumentParser(description='Process report start date')
+    parser.add_argument('report_start_date',
+                        nargs='?',
+                        type=get_date,
+                        default=last_month_first_day(),
+                        help='Report start date in mm.dd.yyyy format')
+    parser.add_argument('report_end_date',
+                        nargs='?',
+                        type=get_date,
+                        default=last_month_last_day(),
+                        help='Report end date in mm.dd.yyyy format')
+    args = parser.parse_args()
+
+    report_start_date = args.report_start_date
+    report_end_date = args.report_end_date
 
     shifts_data = get_shifts(report_start_date, report_end_date, access_token)
     if shifts_data:
