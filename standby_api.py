@@ -33,23 +33,27 @@ import requests
 AUTH_URL = 'https://www.humanity.com/oauth2/token.php'
 API_BASE_URL = 'https://www.humanity.com/api/v2'
 CREDENTIALS_FILE = './auth/credentials.json'
-POSITIONS_FILE = './output/positions.json'
+POSITIONS_FILE = './positions.json'
 OUTPUT_REPORT_PATH = './output/report_'
+
 
 # Function to handle error response from API
 def handle_api_error(response: requests.Response) -> None:
     if response.status_code != 200:
-        raise Exception(f"Failed to retrieve data. Status code: {response.status_code}")
+        raise Exception(
+            f"Failed to retrieve data. Status code: {response.status_code}")
+
 
 # Function to retrieve access token using provided credentials
 def get_access_token(credentials_file: str) -> str:
     # Retrieve access token using provided credentials
     with open(credentials_file) as json_file:
         credentials = json.load(json_file)
-    
+
     response = requests.post(url=AUTH_URL, data=credentials)
     handle_api_error(response)
     return json.loads(response.text).get('access_token')
+
 
 def get_positions(access_token: str) -> dict | None:
     # Construct API URL
@@ -64,17 +68,26 @@ def get_positions(access_token: str) -> dict | None:
         positions_dict = {}
         for index, position in enumerate(position_data):
             positions_dict[index] = {
-                'id': str(position.get('id')),
-                'name': position.get('name'),
-                'location': position['location'].get('name', 'Internal') if 'location' in position else 'Internal'
+                'id':
+                str(position.get('id')),
+                'name':
+                position.get('name'),
+                'location':
+                position['location'].get('name', 'Internal')
+                if 'location' in position else 'Internal'
             }
         return positions_dict
     else:
-        print(f"Failed to retrieve shifts. Status code: {response.status_code}")
+        print(
+            f"Failed to retrieve shifts. Status code: {response.status_code}")
         return None
 
 
-def get_shifts(start_date: datetime.date, end_date: datetime.date, access_token: str, positions: dict = {}, mode: str = 'overview') -> dict | None:
+def get_shifts(start_date: datetime.date,
+               end_date: datetime.date,
+               access_token: str,
+               positions: dict = {},
+               mode: str = 'overview') -> dict | None:
     # Construct API URL
     url = f'{API_BASE_URL}/shifts'
     headers = {"accept": "application/json"}
@@ -94,7 +107,8 @@ def get_shifts(start_date: datetime.date, end_date: datetime.date, access_token:
     if response.status_code == 200:
         return response.json()
     else:
-        print(f"Failed to retrieve shifts. Status code: {response.status_code}")
+        print(
+            f"Failed to retrieve shifts. Status code: {response.status_code}")
         return None
 
 
@@ -136,14 +150,16 @@ def parse_data(shifts_data: dict) -> pd.DataFrame:
                 add_data(employee['name'], employee['paidtime'])
 
         # Account for OnCall shifts
-        if 'employeesOnCall' in shift and isinstance(shift['employeesOnCall'], list):
+        if 'employeesOnCall' in shift and isinstance(shift['employeesOnCall'],
+                                                     list):
             for employee in shift['employeesOnCall']:
                 add_data(employee['name'], shift_hours)
 
     return pd.DataFrame(data_list)
 
 
-def calculate_overtime(shift_start: pd.Timestamp, shift_end: pd.Timestamp) -> float:
+def calculate_overtime(shift_start: pd.Timestamp,
+                       shift_end: pd.Timestamp) -> float:
     '''Assuming only weekdays, return total overtime outside of business hours
 
     Args:
@@ -155,20 +171,22 @@ def calculate_overtime(shift_start: pd.Timestamp, shift_end: pd.Timestamp) -> fl
     '''
     bau_start = shift_start.replace(hour=9, minute=0, second=0)
     bau_end = shift_start.replace(hour=18, minute=0, second=0)
-    
+
     # If the start time is after the bau end or end time is before the bau start
     if shift_start >= bau_end or shift_end <= bau_start:
-        return (shift_end - shift_start).total_seconds() / 3600  # Total hours outside the bau
-    
+        return (shift_end - shift_start
+                ).total_seconds() / 3600  # Total hours outside the bau
+
     # Calculating the duration outside the bau
     before_bau = max(0, (bau_start - shift_start).total_seconds() / 3600)
     after_bau = max(0, (shift_end - bau_end).total_seconds() / 3600)
-    
+
     overtime = before_bau + after_bau
     return overtime
 
 
-def separate_hours(shift_start_dates: pd.Series, shift_end_dates: pd.Series) -> tuple:
+def separate_hours(shift_start_dates: pd.Series,
+                   shift_end_dates: pd.Series) -> tuple:
     '''Analyze given start and end Series and return a breakdown into weekend, weekday and overtime for each pair
 
     Args:
@@ -189,21 +207,23 @@ def separate_hours(shift_start_dates: pd.Series, shift_end_dates: pd.Series) -> 
     for i in range(len(shift_start_dates)):
         shift_start: pd.Timestamp = shift_start_dates.iloc[i]
         shift_end: pd.Timestamp = shift_end_dates.iloc[i]
-        
+
         # Shift starts and ends within weekdays
         if shift_start.weekday() < 5 and shift_end.weekday() < 5:
-            weekday_hours.append((shift_end - shift_start).total_seconds() / 3600)
+            weekday_hours.append(
+                (shift_end - shift_start).total_seconds() / 3600)
             weekend_hours.append(0)
             # Log overtime for hours outside of business start (9am) to business end (6pm)
             overtime.append(calculate_overtime(shift_start, shift_end))
-        
+
         # Shift starts and ends within weekends
         elif shift_start.weekday() >= 5 and shift_end.weekday() >= 5:
-            weekend_hours.append((shift_end - shift_start).total_seconds() / 3600)
+            weekend_hours.append(
+                (shift_end - shift_start).total_seconds() / 3600)
             weekday_hours.append(0)
             # Log all weekend time towards overtime
             overtime.append((shift_end - shift_start).total_seconds() / 3600)
-        
+
         # Shift spans across weekend and weekdays
         else:
             midnight = shift_end.replace(hour=0, minute=0, second=0)
@@ -215,15 +235,17 @@ def separate_hours(shift_start_dates: pd.Series, shift_end_dates: pd.Series) -> 
                 weekend_hours.append(after_midnight)
                 # Log overtime for hours outside of business start (9am) to business end (6pm) starting from start date up till midnight
                 # Log all weekend time towards overtime
-                overtime.append(calculate_overtime(shift_start, midnight) + after_midnight)
-            
+                overtime.append(
+                    calculate_overtime(shift_start, midnight) + after_midnight)
+
             # Shift starts on weekend and ends on weekday
             else:
                 weekday_hours.append(after_midnight)
-                weekend_hours.append(before_midnight)         
+                weekend_hours.append(before_midnight)
                 # Log all weekend time towards overtime
                 # Log overtime for hours outside of business start (9am) to business end (6pm) starting from midnight till the end date
-                overtime.append(before_midnight + calculate_overtime(midnight, shift_end))
+                overtime.append(before_midnight +
+                                calculate_overtime(midnight, shift_end))
     return weekday_hours, weekend_hours, overtime
 
 
@@ -237,13 +259,15 @@ def filter_include(df: pd.DataFrame, positions: tuple) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Filtered Series
     '''
-    with open('./output/positions.json') as json_file:
+    with open(POSITIONS_FILE) as json_file:
         data = json.load(json_file)
-    pos_id = [entry['id'] for entry in data.values() if entry['name'] in positions]
-    
+    pos_id = [
+        entry['id'] for entry in data.values() if entry['name'] in positions
+    ]
+
     filtered_df = df[df['Pos_id'].isin(pos_id)]
     return pd.DataFrame(filtered_df)
-        
+
 
 if __name__ == '__main__':
     access_token = get_access_token(CREDENTIALS_FILE)
@@ -253,29 +277,31 @@ if __name__ == '__main__':
         with open(POSITIONS_FILE, 'w') as json_file:
             json.dump(positions, json_file, indent=2)
 
-    report_start_date = datetime.date(2022, 2, 1)
-    report_end_date = datetime.date(2022, 2, 28)
-    
+    report_start_date = datetime.date(2024, 2, 1)
+    report_end_date = datetime.date(2024, 2, 28)
+
     shifts_data = get_shifts(report_start_date, report_end_date, access_token)
     if shifts_data:
         # Process shifts_data as needed
         shift_report = parse_data(shifts_data)
-        
+
         # Calculate weekday and weekend hours for each shift
         start_dates = shift_report.loc[:, 'Start_date']
         end_dates = shift_report.loc[:, 'End_date']
 
         weekday_hours, weekend_hours, overtime = separate_hours(
-            start_dates, end_dates
-        )
+            start_dates, end_dates)
 
         # Add additional columns to shift_report
-        shift_report['Break'] = shift_report['Shift_hours'] - shift_report['Employee_hours']
+        shift_report['Break'] = shift_report['Shift_hours'] - shift_report[
+            'Employee_hours']
         # Account for missing breaks
-        condition = (shift_report['Pos_id'].isin(['3110228', '3115140'])) & (shift_report['Title'] == 'Morning/Day') & (shift_report['Break'] == 0)
+        condition = (shift_report['Pos_id'].isin(['3110228', '3115140'])) & (
+            shift_report['Title'] == 'Morning/Day') & (shift_report['Break']
+                                                       == 0)
         shift_report.loc[condition, 'Employee_hours'] -= 9.0
         shift_report.loc[condition, 'Break'] = 9.0
-        
+
         shift_report['Weekday_hours'] = weekday_hours - shift_report['Break']
         shift_report['Weekend_hours'] = weekend_hours
         shift_report['Overtime'] = overtime
@@ -289,13 +315,14 @@ if __name__ == '__main__':
             Number_of_shifts=('Position', 'count'),
             Total_hours=('Employee_hours', 'sum'),
             Total_weekday_hours=('Weekday_hours', 'sum'),
-            Total_weekend_hours=('Weekend_hours', 'sum')
-        ).reset_index()
+            Total_weekend_hours=('Weekend_hours', 'sum')).reset_index()
 
         # Formatting the columns with floating-point numbers to two decimal places
         standby_report['Total_hours'] = standby_report['Total_hours'].round(2)
-        standby_report['Total_weekday_hours'] = standby_report['Total_weekday_hours'].round(2)
-        standby_report['Total_weekend_hours'] = standby_report['Total_weekend_hours'].round(2)
+        standby_report['Total_weekday_hours'] = standby_report[
+            'Total_weekday_hours'].round(2)
+        standby_report['Total_weekend_hours'] = standby_report[
+            'Total_weekend_hours'].round(2)
 
         print(standby_report)
         timeline = f'{report_start_date.strftime("%Y-%m-%d")}_{report_end_date.strftime("%Y-%m-%d")}'
@@ -307,7 +334,7 @@ if __name__ == '__main__':
             standby_report.to_csv(f, index=False)
 
         ## Timesheet report ##
-        # TODO 
+        # TODO
         # Add shift notes to the shift report (or replace shift report with different data that includes notes)
         # Similar to positions fetch employee list with ids and emails
         # Create new timesheet report df
@@ -315,4 +342,3 @@ if __name__ == '__main__':
         #     - Include Date, Position, Start time, End time, Overtime, Shift Title, Notes
         #     - Group and sort by date
         #     - Save the output to csv
-        
