@@ -36,6 +36,14 @@ API_BASE_URL = 'https://www.humanity.com/api/v2'
 CREDENTIALS_FILE = './auth/credentials.json'
 POSITIONS_FILE = './positions.json'
 OUTPUT_REPORT_PATH = './output/report_'
+DEFAULT_POSITIONS = {
+    '3115142': '24/7 Cisco Urgent',
+    '3115140': '24/7 O1 Urgent',
+    '3115141': '24/7 O2 Planned/Backup',
+    '3110230': '24/7 Cisco Urgent',
+    '3110228': '24/7 T1 Urgent',
+    '3110229': '24/7 T2 Planned/Backup'
+}
 
 
 def get_date(date_str):
@@ -268,7 +276,7 @@ def separate_hours(shift_start_dates: pd.Series,
     return weekday_hours, weekend_hours, overtime
 
 
-def filter_include(df: pd.DataFrame, positions: tuple) -> pd.DataFrame:
+def filter_include(df: pd.DataFrame, select_positions: tuple) -> pd.DataFrame:
     '''Return filtered Series where position includes given position names
 
     Args:
@@ -278,13 +286,7 @@ def filter_include(df: pd.DataFrame, positions: tuple) -> pd.DataFrame:
     Returns:
         pd.DataFrame: Filtered Series
     '''
-    with open(POSITIONS_FILE) as json_file:
-        data = json.load(json_file)
-    pos_id = [
-        entry['id'] for entry in data.values() if entry['name'] in positions
-    ]
-
-    filtered_df = df[df['Pos_id'].isin(pos_id)]
+    filtered_df = df[df['Pos_id'].isin(select_positions)]
     return pd.DataFrame(filtered_df)
 
 
@@ -296,7 +298,6 @@ if __name__ == '__main__':
         with open(POSITIONS_FILE, 'w') as json_file:
             json.dump(positions, json_file, indent=2)
 
-    #report_start_date = datetime.date(2024, 2, 1)
     parser = argparse.ArgumentParser(description='Process report start date')
     parser.add_argument('report_start_date',
                         nargs='?',
@@ -308,10 +309,15 @@ if __name__ == '__main__':
                         type=get_date,
                         default=last_month_last_day(),
                         help='Report end date in mm.dd.yyyy format')
+    parser.add_argument('select_positions',
+                        nargs='*',
+                        default=DEFAULT_POSITIONS.keys(),
+                        help='List of positions (e.g. 3115142, 3115141)')
     args = parser.parse_args()
 
     report_start_date = args.report_start_date
     report_end_date = args.report_end_date
+    select_positions = args.select_positions
 
     shifts_data = get_shifts(report_start_date, report_end_date, access_token)
     if shifts_data:
@@ -342,8 +348,7 @@ if __name__ == '__main__':
 
         ## Standby report ##
         # Grouping by 'Name' and aggregating shift count, total hours, weekday hours, and weekend hours
-        positions = '24/7 T1 Urgent', '24/7 O1 Urgent', '24/7 Cisco Urgent', '24/7 O2 Planned/Backup', '24/7 T2 Planned/Backup'
-        filtered_shift_report = filter_include(shift_report, positions)
+        filtered_shift_report = filter_include(shift_report, select_positions)
         standby_report = filtered_shift_report.groupby('Name').agg(
             Number_of_shifts=('Position', 'count'),
             Total_hours=('Employee_hours', 'sum'),
@@ -360,7 +365,7 @@ if __name__ == '__main__':
         print(standby_report)
         timeline = f'{report_start_date.strftime("%Y-%m-%d")}_{report_end_date.strftime("%Y-%m-%d")}'
         output_path = f'./output/report_{timeline}.csv'
-        comment = f'This report includes positions: {"; ".join(positions)} for the time period of {timeline}'
+        comment = f'This report includes positions: {"; ".join(select_positions)} for the time period of {timeline}'
         # Save the report to a CSV file with a comment
         with open(output_path, 'w') as f:
             f.write('# ' + comment + '\n')
