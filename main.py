@@ -84,11 +84,11 @@ if __name__ == '__main__':
         standby_report = generate_standby_report(shift_report, select_positions)
 
         # Export the report to csv
-        timeline = f'{report_start_date.strftime('%Y-%m-%d')}_{report_end_date.strftime('%Y-%m-%d')}'
+        timeline = f'{report_start_date.strftime("%Y-%m-%d")}_{report_end_date.strftime("%Y-%m-%d")}'
         report_name = f'report_{timeline}.csv'
         report_path = f'./output/{report_name}'
         position_names = get_position_names(positions, select_positions)
-        comment = f'This report includes positions: {'; '.join(position_names)} for the time period of {timeline.replace('_', ' to ')}'
+        comment = f'This report includes positions: {"; ".join(position_names)} for the time period of {timeline.replace("_", " to ")}'
         print(comment,'\n', standby_report)
         
         with open(report_path, 'w') as f:
@@ -99,7 +99,7 @@ if __name__ == '__main__':
         smtp_server, smtp_port, from_email, email_password = get_email_credentials(CREDENTIALS_SMTP)
         to_emails = get_recipient_emails(RECIPIENTS_FILE)
 
-        subject = f'Humanity Standby Report {timeline.replace('_', ' to ')}'
+        subject = f'Humanity Standby Report {timeline.replace("_", " to ")}'
         message = f'Please find the attached report.\n{comment}\n\n'
         
         email_msg = create_email(subject, message, from_email, to_emails,
