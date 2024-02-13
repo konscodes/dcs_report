@@ -1,5 +1,6 @@
 import datetime
 import json
+from pathlib import Path
 
 import requests
 
@@ -15,7 +16,7 @@ def handle_api_error(response: requests.Response) -> None:
 
 
 # Function to retrieve access token using provided credentials
-def get_access_token(credentials_file: str) -> str:
+def get_access_token(credentials_file: Path) -> str:
     # Retrieve access token using provided credentials
     with open(credentials_file) as json_file:
         credentials = json.load(json_file)
