@@ -1,0 +1,17 @@
+dcs_report/
+│
+├── auth/
+│   └── credentials.json
+│   └── credentials_smtp.json
+│
+├── output/
+│   └── report_<timestamp>.csv
+│
+├── files/
+│   └── recipients.json
+│   └── positions.json
+│
+├── main.py
+├── api_handler.py
+├── report_generator.py
+└── email_handler.py

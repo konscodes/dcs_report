@@ -162,8 +162,7 @@ cython_debug/
 # Project files
 output*
 auth*
-pos*
 cred*
-recipient*
+files*
 
 .DS_Store
