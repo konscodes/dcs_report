@@ -27,7 +27,12 @@ def get_recipient_emails(filename):
     return to_emails
 
 
-def create_email(subject, message, from_email, to_emails, attachment_filename):
+def create_email(subject,
+                 message,
+                 from_email,
+                 to_emails,
+                 attachment_path,
+                 attachment_name=None):
     msg = MIMEMultipart()
     msg['From'] = from_email
     msg['To'] = ', '.join(to_emails)
@@ -35,16 +40,21 @@ def create_email(subject, message, from_email, to_emails, attachment_filename):
 
     msg.attach(MIMEText(message, 'plain'))
 
-    with open(attachment_filename, 'rb') as attachment:
+    with open(attachment_path, 'rb') as attachment:
         part = MIMEBase('application', 'octet-stream')
         part.set_payload(attachment.read())
 
     encoders.encode_base64(part)
-    part.add_header(
-        "Content-Disposition",
-        f"attachment; filename= {attachment_filename}",
-    )
-
+    if attachment_name:
+        part.add_header(
+            "Content-Disposition",
+            f"attachment; filename={attachment_name}",
+        )
+    else:
+        part.add_header(
+            "Content-Disposition",
+            f"attachment; filename={attachment_path}",
+        )
     msg.attach(part)
 
     return msg
@@ -67,9 +77,9 @@ if __name__ == '__main__':
     subject = 'CSV file'
     message = 'Please find the attached CSV file.'
     from_email = email_address
-    attachment_filename = './output/report_2024-02-01_2024-02-28.csv'
+    attachment_path = './output/report_2024-02-01_2024-02-28.csv'
 
     email_msg = create_email(subject, message, from_email, to_emails,
-                             attachment_filename)
+                             attachment_path)
     send_email(smtp_server, smtp_port, email_address, email_password,
                email_msg)

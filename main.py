@@ -39,6 +39,12 @@ def last_month_last_day():
     today = datetime.date.today()
     return today.replace(day=1) - datetime.timedelta(days=1)
 
+def get_position_names(json_data, select_positions):
+    position_names = []
+    for entry in json_data.values():
+        if entry['id'] in select_positions:
+            position_names.append(entry['name'])
+    return position_names
 
 if __name__ == '__main__':
     # Get position data and save to csv if needed
@@ -79,11 +85,13 @@ if __name__ == '__main__':
 
         # Export the report to csv
         timeline = f'{report_start_date.strftime('%Y-%m-%d')}_{report_end_date.strftime('%Y-%m-%d')}'
-        report_file = f'./output/report_{timeline}.csv'
-        comment = f'This report includes positions: {'; '.join(select_positions)} for the time period of {timeline}'
+        report_name = f'report_{timeline}.csv'
+        report_path = f'./output/{report_name}'
+        position_names = get_position_names(positions, select_positions)
+        comment = f'This report includes positions: {'; '.join(position_names)} for the time period of {timeline.replace('_', ' to ')}'
         print(comment,'\n', standby_report)
         
-        with open(report_file, 'w') as f:
+        with open(report_path, 'w') as f:
             f.write('# ' + comment + '\n')
             standby_report.to_csv(f, index=False)
 
@@ -91,11 +99,11 @@ if __name__ == '__main__':
         smtp_server, smtp_port, from_email, email_password = get_email_credentials(CREDENTIALS_SMTP)
         to_emails = get_recipient_emails(RECIPIENTS_FILE)
 
-        subject = 'CSV file'
-        message = 'Please find the attached CSV file.'
-
+        subject = f'Humanity Standby Report {timeline.replace('_', ' to ')}'
+        message = f'Please find the attached report.\n{comment}\n\n'
+        
         email_msg = create_email(subject, message, from_email, to_emails,
-                                report_file)
+                                attachment_path=report_path, attachment_name=report_name)
         send_email(smtp_server, smtp_port, from_email, email_password,
                 email_msg)
 
