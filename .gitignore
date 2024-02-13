@@ -160,8 +160,10 @@ cython_debug/
 #.idea/
 
 # Project files
-output
-auth
-positions.json
+output*
+auth*
+pos*
+cred*
+recipient*
 
 .DS_Store

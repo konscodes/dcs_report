@@ -48,9 +48,9 @@ DEFAULT_POSITIONS = {
 
 def get_date(date_str):
     try:
-        return datetime.datetime.strptime(date_str, "%m.%d.%Y").date()
+        return datetime.datetime.strptime(date_str, '%m.%d.%Y').date()
     except ValueError:
-        raise argparse.ArgumentTypeError("Invalid date format. Use mm.dd.yyyy")
+        raise argparse.ArgumentTypeError('Invalid date format. Use mm.dd.yyyy')
 
 
 def last_month_first_day():
@@ -68,7 +68,7 @@ def last_month_last_day():
 def handle_api_error(response: requests.Response) -> None:
     if response.status_code != 200:
         raise Exception(
-            f"Failed to retrieve data. Status code: {response.status_code}")
+            f'Failed to retrieve data. Status code: {response.status_code}')
 
 
 # Function to retrieve access token using provided credentials
@@ -85,7 +85,7 @@ def get_access_token(credentials_file: str) -> str:
 def get_positions(access_token: str) -> dict | None:
     # Construct API URL
     url = f'{API_BASE_URL}/positions'
-    headers = {"accept": "application/json"}
+    headers = {'accept': 'application/json'}
     params = {'access_token': access_token}
 
     # Get position data
@@ -106,7 +106,7 @@ def get_positions(access_token: str) -> dict | None:
         return positions_dict
     else:
         print(
-            f"Failed to retrieve shifts. Status code: {response.status_code}")
+            f'Failed to retrieve shifts. Status code: {response.status_code}')
         return None
 
 
@@ -117,7 +117,7 @@ def get_shifts(start_date: datetime.date,
                mode: str = 'overview') -> dict | None:
     # Construct API URL
     url = f'{API_BASE_URL}/shifts'
-    headers = {"accept": "application/json"}
+    headers = {'accept': 'application/json'}
 
     # Format URL parameters
     params = {
@@ -135,7 +135,7 @@ def get_shifts(start_date: datetime.date,
         return response.json()
     else:
         print(
-            f"Failed to retrieve shifts. Status code: {response.status_code}")
+            f'Failed to retrieve shifts. Status code: {response.status_code}')
         return None
 
 
@@ -298,6 +298,7 @@ if __name__ == '__main__':
         with open(POSITIONS_FILE, 'w') as json_file:
             json.dump(positions, json_file, indent=2)
 
+    # Manage script command line arguments
     parser = argparse.ArgumentParser(description='Process report start date')
     parser.add_argument('report_start_date',
                         nargs='?',
@@ -319,6 +320,7 @@ if __name__ == '__main__':
     report_end_date = args.report_end_date
     select_positions = args.select_positions
 
+    # Fetch shift data from the API
     shifts_data = get_shifts(report_start_date, report_end_date, access_token)
     if shifts_data:
         # Process shifts_data as needed
@@ -362,10 +364,11 @@ if __name__ == '__main__':
         standby_report['Total_weekend_hours'] = standby_report[
             'Total_weekend_hours'].round(2)
 
-        print(standby_report)
-        timeline = f'{report_start_date.strftime("%Y-%m-%d")}_{report_end_date.strftime("%Y-%m-%d")}'
+        timeline = f'{report_start_date.strftime('%Y-%m-%d')}_{report_end_date.strftime('%Y-%m-%d')}'
         output_path = f'./output/report_{timeline}.csv'
-        comment = f'This report includes positions: {"; ".join(select_positions)} for the time period of {timeline}'
+        comment = f'This report includes positions: {'; '.join(select_positions)} for the time period of {timeline}'
+        print(comment,'\n', standby_report)
+        
         # Save the report to a CSV file with a comment
         with open(output_path, 'w') as f:
             f.write('# ' + comment + '\n')
