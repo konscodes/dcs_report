@@ -160,9 +160,13 @@ cython_debug/
 #.idea/
 
 # Project files
-output*
+
 auth*
 cred*
-files*
+output/*
+!output/.placeholder
+files/*
+!files/.placeholder
+
 
 .DS_Store
