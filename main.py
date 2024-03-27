@@ -1,6 +1,7 @@
 import argparse
 import datetime
 import json
+import logging
 from pathlib import Path
 
 from api_handler import get_access_token, get_positions, get_shifts
@@ -14,6 +15,8 @@ script_parent = script_path.parent
 CREDENTIALS_FILE = script_parent / 'auth' / 'credentials_humanity.json'
 POSITIONS_FILE = script_parent / 'files' / 'positions.json'
 EMAIL_FILE = script_parent / 'files' / 'email_details.json'
+LOG_FILE = script_parent / 'files' / 'output.log'
+
 OUTPUT_REPORT_PATH = script_parent / 'output' / 'report_'
 DEFAULT_POSITIONS = {
     '3115142': '24/7 Cisco Urgent',
@@ -23,6 +26,11 @@ DEFAULT_POSITIONS = {
     '3110228': '24/7 T1 Urgent',
     '3110229': '24/7 T2 Planned/Backup'
 }
+
+# Logging configuration
+logging.basicConfig(filename=LOG_FILE,
+                    level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 def get_date(date_str):
@@ -52,6 +60,7 @@ def get_position_names(json_data, select_positions):
 
 
 if __name__ == '__main__':
+    logging.info('Script started.')
     # Get position data and save to csv if needed
     access_token = get_access_token(CREDENTIALS_FILE)
     positions = get_positions(access_token)
