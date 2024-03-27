@@ -71,7 +71,7 @@ def send_email(smtp_server, smtp_port, email_address, email_password, msg):
 if __name__ == '__main__':
     # Usage example
     smtp_server, smtp_port, email_address, email_password = get_email_credentials(
-        'credentials_smtp.json')
+        './auth/credentials_smtp.json')
     to_emails = get_recipient_emails('recipients.json')
 
     subject = 'CSV file'

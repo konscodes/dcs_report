@@ -4,18 +4,16 @@ import json
 from pathlib import Path
 
 from api_handler import get_access_token, get_positions, get_shifts
-from email_handler import (create_email, get_email_credentials,
-                           get_recipient_emails, send_email)
+from office_handler import get_email_details, send_email
 from report_generator import generate_shift_report, generate_standby_report
 
 script_path = Path(__file__).resolve()
 script_parent = script_path.parent
 
 # Constants and configurations
-CREDENTIALS_FILE = script_parent / 'auth' / 'credentials.json'
-CREDENTIALS_SMTP = script_parent / 'auth' / 'credentials_smtp.json'
-RECIPIENTS_FILE = script_parent / 'files' / 'recipients.json'
+CREDENTIALS_FILE = script_parent / 'auth' / 'credentials_humanity.json'
 POSITIONS_FILE = script_parent / 'files' / 'positions.json'
+EMAIL_FILE = script_parent / 'files' / 'email_details.json'
 OUTPUT_REPORT_PATH = script_parent / 'output' / 'report_'
 DEFAULT_POSITIONS = {
     '3115142': '24/7 Cisco Urgent',
@@ -79,7 +77,7 @@ if __name__ == '__main__':
                         help='List of positions (e.g. 3115142, 3115141)')
     parser.add_argument('--email_report',
                         action='store_true',
-                        default=False,
+                        default=True,
                         help='Send the report over email True or False')
     args = parser.parse_args()
 
@@ -112,21 +110,17 @@ if __name__ == '__main__':
     # Send the report over email
     if email_report:
         print('Sending email..')
-        smtp_server, smtp_port, from_email, email_password = get_email_credentials(
-            CREDENTIALS_SMTP)
-        to_emails = get_recipient_emails(RECIPIENTS_FILE)
 
-        subject = f'Humanity Standby Report {timeline.replace("_", " to ")}'
-        message = f'Please find the attached report.\n{comment}\n\n'
-
-        email_msg = create_email(subject,
-                                 message,
-                                 from_email,
-                                 to_emails,
-                                 attachment_path=report_path,
-                                 attachment_name=report_name)
-        send_email(smtp_server, smtp_port, from_email, email_password,
-                   email_msg)
+        # Set email details
+        sender_email, recipient_emails, subject_default, body_default = get_email_details(
+            EMAIL_FILE)
+        subject = f'Shift report - {report_start_date.strftime("%b %Y")}'
+        body = f'Included positions: {"; ".join(position_names)}\n' + f'Time period: {timeline.replace("_", " to ")}\n\n' + body_default
+        send_email(sender_email,
+                   recipient_emails,
+                   subject,
+                   body,
+                   attachment_path=report_path)
 
     # Timesheet report
     # TODO
