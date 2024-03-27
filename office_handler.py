@@ -1,7 +1,14 @@
 import base64
 import json
+from pathlib import Path
 
 import requests
+
+script_path = Path(__file__).resolve()
+script_parent = script_path.parent
+
+# Constants and configurations
+OFFICE_CREDENTIALS_FILE = script_parent / 'auth' / 'credentials_office.json'
 
 
 def read_json(filename):
@@ -50,7 +57,7 @@ def send_email(sender_email,
                attachment_path=None):
     # Get credentials from JSON files
     tenant_id, client_id, client_secret = get_office_credentials(
-        './auth/credentials_office.json')
+        OFFICE_CREDENTIALS_FILE)
 
     # Obtain access token internally
     access_token = get_access_token(tenant_id, client_id, client_secret)

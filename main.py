@@ -15,7 +15,7 @@ script_parent = script_path.parent
 CREDENTIALS_FILE = script_parent / 'auth' / 'credentials_humanity.json'
 POSITIONS_FILE = script_parent / 'files' / 'positions.json'
 EMAIL_FILE = script_parent / 'files' / 'email_details.json'
-LOG_FILE = script_parent / 'files' / 'output.log'
+LOG_FILE = script_parent / 'output' / 'event.log'
 
 OUTPUT_REPORT_PATH = script_parent / 'output' / 'report_'
 DEFAULT_POSITIONS = {
@@ -30,7 +30,8 @@ DEFAULT_POSITIONS = {
 # Logging configuration
 logging.basicConfig(filename=LOG_FILE,
                     level=logging.INFO,
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+                    format='%(asctime)s - %(levelname)s - %(message)s',
+                    encoding='utf-8')
 
 
 def get_date(date_str):
